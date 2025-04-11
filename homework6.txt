@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Grafici Payoff Opzioni</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      text-align: center;
+    }
+    .canvas-container, #extraOptionsContainer {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 30px;
+    }
+    canvas {
+      border: 1px solid black;
+      margin-top: 20px;
+    }
+    .controls {
+      margin: 20px;
+    }
+    .slider-label {
+      font-weight: bold;
+    }
+    .extra-option {
+      border: 1px solid #ccc;
+      padding: 10px;
+      margin: 10px;
+      width: 250px;
+      text-align: left;
+    }
+    .expired {
+      color: red;
+      font-weight: bold;
+    }
+    .active {
+      color: green;
+      font-weight: bold;
+    }
+  </style>
+</head>
+<body>
+  <h1>Grafici Payoff Opzioni</h1>
+
+  <div class="controls">
+    <label class="slider-label">Data di riferimento:</label>
+    <input type="date" id="referenceDate">
+  </div>
+
+  <div class="canvas-container">
+    <div>
+      <h3>Payoff Globale</h3>
+      <canvas id="globalPayoffCanvas" width="400" height="300"></canvas>
+    </div>
+  </div>
+
+  <div class="controls">
+    <button id="addOptionButton">Aggiungi nuova opzione</button>
+  </div>
+
+  <div id="extraOptionsContainer" class="canvas-container"></div>
+
+  <div>
+    <h3>Payoff Globale Calcolato:</h3>
+    <p id="globalPayoffValue">Inserisci un prezzo per calcolare il payoff.</p>
+  </div>
+
+  <script>
+    const referenceDate = document.getElementById("referenceDate");
+    const globalPayoffCanvas = document.getElementById("globalPayoffCanvas");
+    const extraOptionsContainer = document.getElementById("extraOptionsContainer");
+    const addOptionButton = document.getElementById("addOptionButton");
+    const globalPayoffValue = document.getElementById("globalPayoffValue");
+
+    const extraOptions = [];
+
+    function calculatePayoff(option, S) {
+      const timeToExpiration = (new Date(option.expirationDate) - new Date(referenceDate.value)) / (1000 * 60 * 60 * 24);
+      if (timeToExpiration < 0) return 0; // Opzione scaduta
+      if (option.type === "Call Long") return option.quantity * (Math.max(S - option.strike, 0) - option.premium);
+      if (option.type === "Call Short") return option.quantity * (-(Math.max(S - option.strike, 0) - option.premium));
+      if (option.type === "Put Long") return option.quantity * (Math.max(option.strike - S, 0) - option.premium);
+      if (option.type === "Put Short") return option.quantity * (-(Math.max(option.strike - S, 0) - option.premium));
+      return 0;
+    }
+
+    function calculateGlobalPayoff(S) {
+      return extraOptions.reduce((total, option) => total + calculatePayoff(option, S), 0);
+    }
+
+    function drawChart(canvas, payoffFunction, color) {
+      const ctx = canvas.getContext("2d");
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      const originX = 50;
+      const originY = canvas.height / 2;
+
+      // Disegna gli assi
+      ctx.beginPath();
+      ctx.moveTo(originX, 0);
+      ctx.lineTo(originX, canvas.height);
+      ctx.moveTo(0, originY);
+      ctx.lineTo(canvas.width, originY);
+      ctx.strokeStyle = "black";
+      ctx.stroke();
+
+      ctx.fillStyle = "black";
+      ctx.font = "10px Arial";
+
+      // Etichette asse X
+      for (let S = 50; S <= 150; S += 10) {
+        const x = originX + (S - 50) * 3;
+        ctx.fillText(S, x - 10, originY + 15);
+        ctx.beginPath();
+        ctx.moveTo(x, originY - 3);
+        ctx.lineTo(x, originY + 3);
+        ctx.stroke();
+      }
+
+      // Etichette asse Y
+      for (let P = -50; P <= 50; P += 10) {
+        const y = originY - P * 2;
+        ctx.fillText(P, originX - 30, y + 3);
+        ctx.beginPath();
+        ctx.moveTo(originX - 3, y);
+        ctx.lineTo(originX + 3, y);
+        ctx.stroke();
+      }
+
+      // Disegna il payoff
+      ctx.beginPath();
+      for (let S = 50; S <= 150; S++) {
+        const x = originX + (S - 50) * 3;
+        const y = originY - payoffFunction(S) * 2;
+        if (S === 50) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      }
+      ctx.strokeStyle = color;
+      ctx.stroke();
+    }
+
+    function updateGlobalPayoffChart() {
+      if (referenceDate.value) {
+        drawChart(globalPayoffCanvas, S => calculateGlobalPayoff(S), "blue");
+        const S_default = 100; // Valore centrale
+        const payoff = calculateGlobalPayoff(S_default);
+        globalPayoffValue.textContent = `Payoff globale per S = ${S_default}: ${payoff.toFixed(2)}`;
+      }
+    }
+
+    function updateOptionsDisplay() {
+      extraOptionsContainer.innerHTML = ''; // Pulisce i riquadri esistenti
+      extraOptions.forEach(option => {
+        const optionDate = new Date(option.expirationDate);
+        const currentDate = new Date(referenceDate.value);
+        const status = optionDate < currentDate ? 'scaduta' : 'attiva';
+        const statusClass = status === 'scaduta' ? 'expired' : 'active';
+
+        // Crea un nuovo riquadro per ogni opzione con dettagli su righe separate
+        const optionDiv = document.createElement('div');
+        optionDiv.classList.add('extra-option');
+        optionDiv.innerHTML = `
+          <p>Tipo: ${option.type}</p>
+          <p>Prezzo di esercizio: ${option.strike}</p>
+          <p>Quantità: ${option.quantity}</p>
+          <p>Premium: ${option.premium}</p>
+          <p>Scadenza: ${option.expirationDate} <span class="${statusClass}">(${status})</span></p>
+        `;
+        extraOptionsContainer.appendChild(optionDiv);
+      });
+    }
+
+    addOptionButton.addEventListener("click", () => {
+      const strike = parseFloat(prompt("Prezzo di esercizio:"));
+      const premium = parseFloat(prompt("Premium:"));
+      const quantity = parseInt(prompt("Quantità:"));
+      const type = prompt("Tipo di opzione (Call Long, Call Short, Put Long, Put Short):");
+      const expirationDate = prompt("Data di scadenza (yyyy-mm-dd):");
+      extraOptions.push({ strike, premium, quantity, type, expirationDate });
+      updateGlobalPayoffChart();
+      updateOptionsDisplay();
+    });
+
+    referenceDate.addEventListener("change", () => {
+      updateGlobalPayoffChart();
+      updateOptionsDisplay();
+    });
+  </script>
+</body>
+</html>
